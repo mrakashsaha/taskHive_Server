@@ -10,7 +10,7 @@ app.use(express.json());
 
 
 
-const { MongoClient, ServerApiVersion } = require('mongodb');
+const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 const uri = `mongodb+srv://${process.env.DB_ADMIN}:${process.env.DB_PASSWORD}@cluster0.4qal0.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
 
 // Create a MongoClient with a MongoClientOptions object to set the Stable API version
@@ -76,7 +76,7 @@ async function run() {
         app.post("/tasks", async (req, res) => {
             const reduceCoin = req?.body?.requiredWorkers * req?.body?.payableAmount;
 
-           const reduceCoinFilter = { email: req?.body?.postedBy };
+            const reduceCoinFilter = { email: req?.body?.postedBy };
 
             const reduceCoinDoc = {
                 $inc: {
@@ -108,10 +108,29 @@ async function run() {
         })
 
 
-        // Get All tasks of a Spacific User
-        app.get ("/myTask", async (req, res)=> {
-            const query = {postedBy: req?.query?.email}
-            const result = await tasksCollection.find(query).toArray();
+        // Update a Task
+        app.patch("/updateTask", async (req, res) => {
+            const filter = {_id: new ObjectId(req?.body?._id)}
+            const updateTaskDoc = {
+                $set: {
+                    taskTitle: req?.body?.taskTitle,
+                    submissionInfo: req?.body?.submissionInfo,
+                    taskDetails: req?.body?.taskDetails,
+                }
+            }
+            const result = await tasksCollection.updateOne(filter, updateTaskDoc);
+            res.send(result);
+
+        })
+
+
+        // Get All tasks of a Spacific User sort by date
+        app.get("/myTask", async (req, res) => {
+            const query = { postedBy: req?.query?.email }
+            const option = {
+                sort: { "completionDate": -1 }
+            }
+            const result = await tasksCollection.find(query, option).toArray();
             res.send(result);
         })
 

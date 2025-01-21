@@ -30,6 +30,7 @@ async function run() {
         console.log("Pinged your deployment. You successfully connected to MongoDB!");
 
         const usersCollection = client.db("taskHiveDB").collection("users");
+        const tasksCollection = client.db("taskHiveDB").collection("tasks");
 
 
 
@@ -37,8 +38,8 @@ async function run() {
 
 
         // Get a User Information
-        app.get("/user", async (req, res)=> {
-            const query = {email: req?.query?.email};
+        app.get("/user", async (req, res) => {
+            const query = { email: req?.query?.email };
             const result = await usersCollection.findOne(query);
             res.send(result);
         })
@@ -47,7 +48,7 @@ async function run() {
         // Insert New Useronly into DataBase
         app.put("/users", async (req, res) => {
             let coinValue;
-            if (req?.body?.role ==="buyer") {
+            if (req?.body?.role === "buyer") {
                 coinValue = 50;
             }
             else {
@@ -67,7 +68,56 @@ async function run() {
             const result = await usersCollection.updateOne(filter, updateDoc, options);
             res.send(result);
         })
-        
+
+
+        // ---------Tasks Collections---------
+
+        // Posting a Task
+        app.post("/tasks", async (req, res) => {
+            const reduceCoin = req?.body?.requiredWorkers * req?.body?.payableAmount;
+
+           const reduceCoinFilter = { email: req?.body?.postedBy };
+
+            const reduceCoinDoc = {
+                $inc: {
+                    coin: -reduceCoin,
+                },
+            };
+            const reduceCoinResult = await usersCollection.updateOne(reduceCoinFilter, reduceCoinDoc);
+
+            // After cuting coin from the account
+            if (reduceCoinResult?.modifiedCount) {
+
+                const taskDoc = {
+
+                    taskTitle: req?.body?.taskTitle,
+                    taskDetails: req?.body?.taskDetails,
+                    requiredWorkers: parseInt(req?.body?.requiredWorkers),
+                    payableAmount: parseInt(req?.body?.payableAmount),
+                    completionDate: req?.body?.completionDate,
+                    submissionInfo: req?.body?.submissionInfo,
+                    taskImage: req?.body?.taskImage,
+                    postedBy: req?.body?.postedBy,
+
+                }
+
+
+                const taskPostingResult = await tasksCollection.insertOne(taskDoc);
+                res.send({ taskPostingResult, reduceCoinResult });
+            }
+        })
+
+
+        // Get All tasks of a Spacific User
+        app.get ("/myTask", async (req, res)=> {
+            const query = {postedBy: req?.query?.email}
+            const result = await tasksCollection.find(query).toArray();
+            res.send(result);
+        })
+
+
+
+
 
 
 

@@ -2,12 +2,39 @@ const express = require('express')
 const app = express();
 require('dotenv').config();
 const cors = require('cors');
+const stripe = require("stripe")(process.env.STRIPE_SK);
 const port = process.env.PORT || 5000;
 
 // Middlewires
 app.use(cors());
 app.use(express.json());
 
+
+// Const Custom Function for convert USD to Coins
+const usdToCoin = (usd) => {
+
+    if (usd === 1) {
+        return 10;
+    }
+
+    else if (usd === 10) {
+        return 150;
+    }
+
+    else if (usd === 20) {
+        return 500;
+    }
+
+    else if (usd === 35) {
+        return 1000;
+    }
+
+    else {
+        return 0;
+    }
+
+
+}
 
 
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
@@ -31,6 +58,7 @@ async function run() {
 
         const usersCollection = client.db("taskHiveDB").collection("users");
         const tasksCollection = client.db("taskHiveDB").collection("tasks");
+        const paymentsCollection = client.db("taskHiveDB").collection("payments");
 
 
 
@@ -83,34 +111,34 @@ async function run() {
                     coin: -reduceCoin,
                 },
             };
-            const reduceCoinResult = await usersCollection.updateOne(reduceCoinFilter, reduceCoinDoc);
 
-            // After cuting coin from the account
-            if (reduceCoinResult?.modifiedCount) {
+            const taskDoc = {
+                taskTitle: req?.body?.taskTitle,
+                taskDetails: req?.body?.taskDetails,
+                requiredWorkers: parseInt(req?.body?.requiredWorkers),
+                payableAmount: parseInt(req?.body?.payableAmount),
+                completionDate: req?.body?.completionDate,
+                submissionInfo: req?.body?.submissionInfo,
+                taskImage: req?.body?.taskImage,
+                postedBy: req?.body?.postedBy,
 
-                const taskDoc = {
+            }
 
-                    taskTitle: req?.body?.taskTitle,
-                    taskDetails: req?.body?.taskDetails,
-                    requiredWorkers: parseInt(req?.body?.requiredWorkers),
-                    payableAmount: parseInt(req?.body?.payableAmount),
-                    completionDate: req?.body?.completionDate,
-                    submissionInfo: req?.body?.submissionInfo,
-                    taskImage: req?.body?.taskImage,
-                    postedBy: req?.body?.postedBy,
-
-                }
+            const taskPostingResult = await tasksCollection.insertOne(taskDoc);
 
 
-                const taskPostingResult = await tasksCollection.insertOne(taskDoc);
+            if (taskPostingResult?.insertedId) {
+                const reduceCoinResult = await usersCollection.updateOne(reduceCoinFilter, reduceCoinDoc);
                 res.send({ taskPostingResult, reduceCoinResult });
             }
+
+
         })
 
 
         // Update a Task
         app.patch("/updateTask", async (req, res) => {
-            const filter = {_id: new ObjectId(req?.body?._id)}
+            const filter = { _id: new ObjectId(req?.body?._id) }
             const updateTaskDoc = {
                 $set: {
                     taskTitle: req?.body?.taskTitle,
@@ -121,6 +149,28 @@ async function run() {
             const result = await tasksCollection.updateOne(filter, updateTaskDoc);
             res.send(result);
 
+        })
+
+        // Delete a Task
+        app.delete("/deleteTask", async (req, res) => {
+            const query = { _id: new ObjectId(req?.query?.id) }
+
+            const findTaskDetails = await tasksCollection.findOne(query);
+            const refillAmount = findTaskDetails?.requiredWorkers * findTaskDetails?.payableAmount;
+
+            console.log(findTaskDetails, refillAmount)
+            const refillFilter = { email: findTaskDetails?.postedBy }
+            const refillCoinDoc = {
+                $inc: { coin: refillAmount }
+            }
+
+            const deleteResult = await tasksCollection.deleteOne(query);
+
+            if (deleteResult?.deletedCount) {
+                const refillResult = await usersCollection.updateOne(refillFilter, refillCoinDoc);
+
+                res.send(refillResult)
+            }
         })
 
 
@@ -139,8 +189,70 @@ async function run() {
 
 
 
+        // Get Payment By Buyer
+        app.post("/create-payment-intent", async (req, res) => {
+            const { fee } = req.body;
+            const amount = parseInt(fee * 100);
+
+            console.log(amount);
+
+            try {
+                const paymentIntent = await stripe.paymentIntents.create({
+                    amount: amount,
+                    currency: "usd",
+                    payment_method_types: ["card"]
+                })
+
+                res.send({
+                    clientSecret: paymentIntent.client_secret,
+                });
+            }
+
+            catch {
+                res.send({ message: "error" });
+            }
 
 
+
+
+        })
+
+        // Saved Payment Information To MongoDB and Add Coins to Users
+        app.post("/payment", async (req, res) => {
+
+            const paymentDoc = {
+                transactionId: req?.body?.transactionId,
+                amount: req?.body?.amount,
+                email: req?.body?.email,
+                displayName: req?.body?.displayName,
+                date: req?.body?.date,
+                coin: usdToCoin(parseInt(req?.body?.amount)),
+            }
+
+            const incCoinDoc = {
+                $inc: { coin: paymentDoc.coin }
+            }
+
+            const filter = { email: req?.body?.email };
+
+            const incrementCoinResult = await usersCollection.updateOne(filter, incCoinDoc);
+
+            if (incrementCoinResult?.modifiedCount) {
+                const paymentResult = await paymentsCollection.insertOne(paymentDoc);
+                res.send (paymentResult);
+            }
+
+            else {
+                res.send ({error: "Error while storing payment data"})
+            }
+        })
+
+        // Get all paymentdetails from a specific Buyer
+        app.get ("/payment", async (req, res)=> {
+            const query = {email: req?.query?.email};
+            const result = await paymentsCollection.find(query).toArray();
+            res.send(result);
+        })
 
     } finally {
         // Ensures that the client will close when you finish/error

@@ -250,7 +250,10 @@ async function run() {
         // Get all paymentdetails from a specific Buyer
         app.get ("/payment", async (req, res)=> {
             const query = {email: req?.query?.email};
-            const result = await paymentsCollection.find(query).toArray();
+            options = {
+                sort: {date: -1}
+            }
+            const result = await paymentsCollection.find(query, options).toArray();
             res.send(result);
         })
 

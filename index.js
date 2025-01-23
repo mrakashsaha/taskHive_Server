@@ -185,7 +185,51 @@ async function run() {
         })
 
 
+        //    Get All Task For Worker
+        app.get("/task", async (req, res) => {
+            const query = { requiredWorkers: { $gt: 0 } }
 
+            // const activeTaskresult = await tasksCollection.find(query).toArray();
+
+
+            const result = await tasksCollection.aggregate([
+
+                {
+                    $match: {
+                        requiredWorkers: { $gt: 0 }
+                    }
+                },
+
+                {
+                    $lookup: {
+                        from: 'users',
+                        localField: 'postedBy',
+                        foreignField: 'email',
+                        as: 'userInfo'
+                    }
+                },
+                {
+                    $unwind: "$userInfo"
+                },
+                {
+                    $project: {
+                        _id: 1,
+                        taskTitle: 1,
+                        taskDetails: 1,
+                        requiredWorkers: 1,
+                        payableAmount: 1,
+                        completionDate: 1,
+                        submissionInfo: 1,
+                        taskImage: 1,
+                        buyerEmail: "$postedBy",
+                        buyerName: "$userInfo.displayName",
+                        buyerPhoto: "$userInfo.photoURL",
+                    }
+                }
+
+            ]).toArray();
+            res.send(result);
+        })
 
 
 
@@ -239,19 +283,19 @@ async function run() {
 
             if (incrementCoinResult?.modifiedCount) {
                 const paymentResult = await paymentsCollection.insertOne(paymentDoc);
-                res.send (paymentResult);
+                res.send(paymentResult);
             }
 
             else {
-                res.send ({error: "Error while storing payment data"})
+                res.send({ error: "Error while storing payment data" })
             }
         })
 
         // Get all paymentdetails from a specific Buyer
-        app.get ("/payment", async (req, res)=> {
-            const query = {email: req?.query?.email};
+        app.get("/payment", async (req, res) => {
+            const query = { email: req?.query?.email };
             options = {
-                sort: {date: -1}
+                sort: { date: -1 }
             }
             const result = await paymentsCollection.find(query, options).toArray();
             res.send(result);

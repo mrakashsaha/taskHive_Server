@@ -59,7 +59,8 @@ async function run() {
         const usersCollection = client.db("taskHiveDB").collection("users");
         const tasksCollection = client.db("taskHiveDB").collection("tasks");
         const paymentsCollection = client.db("taskHiveDB").collection("payments");
-
+        
+        const submissionCollection = client.db("taskHiveDB").collection("submission");
 
 
         // -------  User related API -------
@@ -187,11 +188,6 @@ async function run() {
 
         //    Get All Task For Worker
         app.get("/task", async (req, res) => {
-            const query = { requiredWorkers: { $gt: 0 } }
-
-            // const activeTaskresult = await tasksCollection.find(query).toArray();
-
-
             const result = await tasksCollection.aggregate([
 
                 {
@@ -229,6 +225,89 @@ async function run() {
 
             ]).toArray();
             res.send(result);
+        })
+
+
+        // Get a specific task details by task _id for Worker
+        app.get("/taskDetails", async (req, res) => {
+            try {
+                const cursor =  tasksCollection.aggregate([
+
+                    {
+                        $match: {
+                            _id: new ObjectId(req.query.id),
+                        }
+                    },
+    
+                    {
+                        $lookup: {
+                            from: 'users',
+                            localField: 'postedBy',
+                            foreignField: 'email',
+                            as: 'userInfo'
+                        }
+                    },
+                    {
+                        $unwind: "$userInfo"
+                    },
+                    {
+                        $project: {
+                            _id: 1,
+                            taskTitle: 1,
+                            taskDetails: 1,
+                            requiredWorkers: 1,
+                            payableAmount: 1,
+                            completionDate: 1,
+                            submissionInfo: 1,
+                            taskImage: 1,
+                            buyerEmail: "$postedBy",
+                            buyerName: "$userInfo.displayName",
+                            buyerPhoto: "$userInfo.photoURL",
+                        }
+                    }
+    
+                ]);
+
+                const result = await cursor.next();
+                res.send(result);
+            }
+
+            catch {
+                res.status(404).send({message: "No task found for Query ID"});
+            }
+        })
+
+
+        // Post a Submission by Worker
+        app.post("/submission", async (req, res)=> {
+            const submissionDoc = {
+                taskId: req?.body?.taskId,
+                taskTitle: req?.body?.taskTitle,
+                payableAmount: parseInt(req?.body?.payableAmount),
+                buyerEmail: req?.body?.buyerEmail,
+                buyerName: req?.body?.buyerName,
+                buyerPhoto: req?.body?.buyerPhoto,
+                workerEmail: req?.body?.workerEmail,
+                workerName: req?.body?.workerName,
+                workerPhoto: req?.body?.workerPhoto,
+                submissionDetails: req?.body?.submissionDetails,
+                currentDate: req?.body?.currentDate,
+                status: req?.body?.status,
+            }
+
+            const result = await submissionCollection.insertOne(submissionDoc);
+
+            res.send(result);
+        })
+
+        // Get My Submission by The Email of Woker
+        app.get("/mySubmission", async (req, res)=> {
+            const query = {workerEmail : req?.query?.email};
+            const options = {$sort: {currentDate: 1}}
+            const result = await submissionCollection.find(query).toArray();
+
+            res.send(result);
+
         })
 
 
@@ -300,6 +379,12 @@ async function run() {
             const result = await paymentsCollection.find(query, options).toArray();
             res.send(result);
         })
+
+
+
+
+
+
 
     } finally {
         // Ensures that the client will close when you finish/error

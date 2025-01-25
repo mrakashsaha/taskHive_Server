@@ -102,6 +102,10 @@ async function run() {
 
         // ---------Tasks Collections---------
 
+
+
+        // ---worker related apis
+
         // Posting a Task
         app.post("/tasks", async (req, res) => {
             const reduceCoin = req?.body?.requiredWorkers * req?.body?.payableAmount;
@@ -330,7 +334,34 @@ async function run() {
             res.send(result);
         })
 
+        // Worker Stats API
+        app.get("/workerStats", async (req, res) => {
+            const workerEmail = req?.query?.email;
+            const workerStats = await submissionCollection.aggregate([
+                {
+                    $facet: {
+                        allSubmission: [{ $match: { workerEmail: workerEmail } }, { $count: "submissions" }],
+                        pendingSubmission: [{ $match: { workerEmail: workerEmail, status: "pending" } }, { $count: "pendingSubmissions" }],
+                        earnings: [{ $match: { workerEmail: workerEmail, status: "approved" } }, {$group: {_id: null, totalEarnings: { $sum: "$payableAmount" }}}],
+                    }
+                }
+            ]).toArray();
 
+            const result = {
+
+                totalSubmission:  workerStats[0]?.allSubmission[0]?.submissions || 0,
+                totalPendingSubmission:  workerStats[0]?.pendingSubmission[0]?.pendingSubmissions || 0,
+                totalEarnings:  workerStats[0]?.earnings[0]?.totalEarnings || 0,
+                
+            };
+
+            res.send(result)
+        })
+
+
+
+
+        // Buyer related APIs
 
         // Get Payment By Buyer
         app.post("/create-payment-intent", async (req, res) => {
@@ -400,12 +431,42 @@ async function run() {
             res.send(result);
         })
 
+        // Buyer stats have to work not completed
+        app.get("/buyerStats", async (req, res) => {
+            const buyerEmail = req?.params?.buyerEmail;
+
+            const userStats = await usersCollection.aggregate([
+                {
+                    $facet: {
+                        buyers: [{ $match: { role: "buyer" } }, { $count: "buyerNumber" }],
+                        workers: [{ $match: { role: "worker" } }, { $count: "workerNumber" }],
+                        totalCoins: [{ $group: { _id: null, totalCoinBalance: { $sum: "$coin" } } }]
+                    }
+                }
+            ]).toArray();
+
+            const paymentStats = await paymentsCollection.aggregate([
+                {
+                    $group: { _id: null, totalPayment: { $sum: "$coin" } }
+                }
+            ]).toArray();
+
+            const result = {
+                buyerNumber: userStats[0].buyers[0]?.buyerNumber || 0,
+                workerNumber: userStats[0].workers[0]?.workerNumber || 0,
+                totalCoinBalance: userStats[0].totalCoins[0]?.totalCoinBalance || 0,
+                totalPayment: paymentStats[0]?.totalPayment || 0,
+
+            };
+
+            res.send(result)
+        })
 
 
 
 
 
-        //-----Admin Routes------
+        //-----Admin APIS------
 
         // For admin stats
         app.get("/adminStats", async (req, res) => {
@@ -421,7 +482,7 @@ async function run() {
 
             const paymentStats = await paymentsCollection.aggregate([
                 {
-                    $group: {_id: null, totalPayment: {$sum: "$coin"}}
+                    $group: { _id: null, totalPayment: { $sum: "$coin" } }
                 }
             ]).toArray();
 
@@ -433,30 +494,30 @@ async function run() {
 
             };
 
-            res.send (result)
+            res.send(result)
         })
 
         // Get all withdraw request
-        app.get("/pendingWithdraw", async (req, res)=> {
-            const query = {status: "pending"}
+        app.get("/pendingWithdraw", async (req, res) => {
+            const query = { status: "pending" }
             const result = await withdrawCollection.find(query).toArray();
             res.send(result);
         })
 
         // Approve Withdraw Status
-        app.patch("/approveWithdraw", async (req, res)=> {
-            const filter = {_id : new ObjectId (req?.body?.id)}
+        app.patch("/approveWithdraw", async (req, res) => {
+            const filter = { _id: new ObjectId(req?.body?.id) }
             const approveDoc = {
-                $set: {status: "approved"}
+                $set: { status: "approved" }
             }
             const approveResult = await withdrawCollection.updateOne(filter, approveDoc);
 
-            const reduceFilter = {email: req?.body?.workerEmail}
+            const reduceFilter = { email: req?.body?.workerEmail }
 
             const coinAmount = parseInt(req?.body?.coinAmount)
 
             const reduceCoinDoc = {
-                $inc: { coin: -coinAmount}
+                $inc: { coin: -coinAmount }
             }
 
             if (approveResult?.modifiedCount) {
@@ -464,7 +525,7 @@ async function run() {
 
                 res.send(reduceResult)
             }
-            
+
         })
 
 

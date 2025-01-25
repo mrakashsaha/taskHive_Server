@@ -337,6 +337,7 @@ async function run() {
         // Worker Stats API
         app.get("/workerStats", async (req, res) => {
             const workerEmail = req?.query?.email;
+            console.log(workerEmail);
             const workerStats = await submissionCollection.aggregate([
                 {
                     $facet: {
@@ -356,6 +357,14 @@ async function run() {
             };
 
             res.send(result)
+        })
+
+
+        // Approve submission for view only by worker
+        app.get("/approvedSubmission", async (req, res)=> {
+            const query = {workerEmail: req?.query?.email, status: "approved"}
+            const result = await submissionCollection.find(query).toArray();
+            res.send (result);
         })
 
 

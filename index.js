@@ -442,30 +442,27 @@ async function run() {
 
         // Buyer stats have to work not completed
         app.get("/buyerStats", async (req, res) => {
-            const buyerEmail = req?.params?.buyerEmail;
-
-            const userStats = await usersCollection.aggregate([
+            const buyerEmail = req?.query?.email;
+            console.log(buyerEmail);
+            const buyerStats = await tasksCollection.aggregate([
                 {
                     $facet: {
-                        buyers: [{ $match: { role: "buyer" } }, { $count: "buyerNumber" }],
-                        workers: [{ $match: { role: "worker" } }, { $count: "workerNumber" }],
-                        totalCoins: [{ $group: { _id: null, totalCoinBalance: { $sum: "$coin" } } }]
+                        alltasks: [{ $match: { postedBy: buyerEmail } }, { $count: "tasks" }],
+                        allPendingTasks: [{ $match: { postedBy: buyerEmail} }, {$group: {_id: null, pendingTasks: { $sum: "$requiredWorkers" }}}],
                     }
                 }
             ]).toArray();
 
             const paymentStats = await paymentsCollection.aggregate([
-                {
-                    $group: { _id: null, totalPayment: { $sum: "$coin" } }
-                }
+                { $match: { email: buyerEmail} }, {$group: {_id: null, allpayment: { $sum: "$amount" }}}
             ]).toArray();
 
             const result = {
-                buyerNumber: userStats[0].buyers[0]?.buyerNumber || 0,
-                workerNumber: userStats[0].workers[0]?.workerNumber || 0,
-                totalCoinBalance: userStats[0].totalCoins[0]?.totalCoinBalance || 0,
-                totalPayment: paymentStats[0]?.totalPayment || 0,
 
+                totalTasks:  buyerStats[0]?.alltasks[0]?.tasks || 0,
+                totalPendingTask:  buyerStats[0]?.allPendingTasks[0]?.pendingTasks || 0,
+                totalPayments:  paymentStats[0].allpayment || 0,
+                
             };
 
             res.send(result)

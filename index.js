@@ -406,22 +406,88 @@ async function run() {
 
 
         //-----Admin Routes------
-       
-        
+
+        // For admin stats
+        app.get("/adminStats", async (req, res) => {
+            const userStats = await usersCollection.aggregate([
+                {
+                    $facet: {
+                        buyers: [{ $match: { role: "buyer" } }, { $count: "buyerNumber" }],
+                        workers: [{ $match: { role: "worker" } }, { $count: "workerNumber" }],
+                        totalCoins: [{ $group: { _id: null, totalCoinBalance: { $sum: "$coin" } } }]
+                    }
+                }
+            ]).toArray();
+
+            const paymentStats = await paymentsCollection.aggregate([
+                {
+                    $group: {_id: null, totalPayment: {$sum: "$coin"}}
+                }
+            ]).toArray();
+
+            const result = {
+                buyerNumber: userStats[0].buyers[0]?.buyerNumber || 0,
+                workerNumber: userStats[0].workers[0]?.workerNumber || 0,
+                totalCoinBalance: userStats[0].totalCoins[0]?.totalCoinBalance || 0,
+                totalPayment: paymentStats[0]?.totalPayment || 0,
+
+            };
+
+            res.send (result)
+        })
+
+
         // Get All users Info
-        app.get("/allUsers", async (req, res)=> {
-            
+        app.get("/allUsers", async (req, res) => {
+
             const result = await usersCollection.find().toArray();
             res.send(result);
         })
-        
+
+
+        // Get All Tasks
+        app.get("/allTask", async (req, res) => {
+            const result = await tasksCollection.find().toArray();
+            res.send(result);
+        })
+
+        // Delete Task By Admin
+        app.delete("/deleteTaskByAdmin", async (req, res) => {
+            const query = { _id: new ObjectId(req?.query?.id) }
+
+            const findTaskDetails = await tasksCollection.findOne(query);
+
+
+
+            const refillAmount = findTaskDetails?.requiredWorkers * findTaskDetails?.payableAmount;
+            const refillFilter = { email: findTaskDetails?.postedBy }
+            const refillCoinDoc = {
+                $inc: { coin: refillAmount }
+            }
+
+            const deleteResult = await tasksCollection.deleteOne(query);
+
+            if (deleteResult?.deletedCount) {
+                const refillResult = await usersCollection.updateOne(refillFilter, refillCoinDoc);
+
+                res.send(refillResult)
+            }
+        })
+
         // Chnage user role
-        app.patch ("/changeRole", async (req, res) => {
-            const filter = {_id : new ObjectId (req?.body?.userId)}
-            const roleDoc = {$set: {role: req?.body?.newRole}};
+        app.patch("/changeRole", async (req, res) => {
+            const filter = { _id: new ObjectId(req?.body?.userId) }
+            const roleDoc = { $set: { role: req?.body?.newRole } };
 
             const result = await usersCollection.updateOne(filter, roleDoc);
 
+            res.send(result)
+        })
+
+        // Delete User Role
+        app.delete("/deleteUserByAdmin", async (req, res) => {
+            const filter = { _id: new ObjectId(req?.query?.id) }
+            const result = await usersCollection.deleteOne(filter);
             res.send(result)
         })
 

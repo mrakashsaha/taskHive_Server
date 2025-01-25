@@ -59,8 +59,9 @@ async function run() {
         const usersCollection = client.db("taskHiveDB").collection("users");
         const tasksCollection = client.db("taskHiveDB").collection("tasks");
         const paymentsCollection = client.db("taskHiveDB").collection("payments");
-        
+
         const submissionCollection = client.db("taskHiveDB").collection("submission");
+        const withdrawCollection = client.db("taskHiveDB").collection("withdraw");
 
 
         // -------  User related API -------
@@ -231,14 +232,14 @@ async function run() {
         // Get a specific task details by task _id for Worker
         app.get("/taskDetails", async (req, res) => {
             try {
-                const cursor =  tasksCollection.aggregate([
+                const cursor = tasksCollection.aggregate([
 
                     {
                         $match: {
                             _id: new ObjectId(req.query.id),
                         }
                     },
-    
+
                     {
                         $lookup: {
                             from: 'users',
@@ -265,7 +266,7 @@ async function run() {
                             buyerPhoto: "$userInfo.photoURL",
                         }
                     }
-    
+
                 ]);
 
                 const result = await cursor.next();
@@ -273,13 +274,13 @@ async function run() {
             }
 
             catch {
-                res.status(404).send({message: "No task found for Query ID"});
+                res.status(404).send({ message: "No task found for Query ID" });
             }
         })
 
 
         // Post a Submission by Worker
-        app.post("/submission", async (req, res)=> {
+        app.post("/submission", async (req, res) => {
             const submissionDoc = {
                 taskId: req?.body?.taskId,
                 taskTitle: req?.body?.taskTitle,
@@ -301,13 +302,32 @@ async function run() {
         })
 
         // Get My Submission by The Email of Woker
-        app.get("/mySubmission", async (req, res)=> {
-            const query = {workerEmail : req?.query?.email};
-            const options = {$sort: {currentDate: 1}}
+        app.get("/mySubmission", async (req, res) => {
+            const query = { workerEmail: req?.query?.email };
+            const options = { $sort: { currentDate: 1 } }
             const result = await submissionCollection.find(query).toArray();
 
             res.send(result);
 
+        })
+
+        // Withdraw by Worker
+        app.post("/withdraw", async (req, res) => {
+            const withdrawDoc = {
+                paymentMethod: req?.body?.paymentMethod,
+                accountNo: req?.body?.accountNo,
+                usdAmount: parseInt(req?.body?.usdAmount),
+                coinAmount: parseInt(req?.body?.coinAmount),
+                currentDate: req?.body?.currentDate,
+                status: req?.body?.status,
+                workerEmail: req?.body?.workerEmail,
+                workerName: req?.body?.workerName,
+                workerPhoto: req?.body?.workerPhoto,
+            }
+
+            const result = await withdrawCollection.insertOne(withdrawDoc);
+
+            res.send(result);
         })
 
 
@@ -378,6 +398,31 @@ async function run() {
             }
             const result = await paymentsCollection.find(query, options).toArray();
             res.send(result);
+        })
+
+
+
+
+
+
+        //-----Admin Routes------
+       
+        
+        // Get All users Info
+        app.get("/allUsers", async (req, res)=> {
+            
+            const result = await usersCollection.find().toArray();
+            res.send(result);
+        })
+        
+        // Chnage user role
+        app.patch ("/changeRole", async (req, res) => {
+            const filter = {_id : new ObjectId (req?.body?.userId)}
+            const roleDoc = {$set: {role: req?.body?.newRole}};
+
+            const result = await usersCollection.updateOne(filter, roleDoc);
+
+            res.send(result)
         })
 
 

@@ -436,6 +436,37 @@ async function run() {
             res.send (result)
         })
 
+        // Get all withdraw request
+        app.get("/pendingWithdraw", async (req, res)=> {
+            const query = {status: "pending"}
+            const result = await withdrawCollection.find(query).toArray();
+            res.send(result);
+        })
+
+        // Approve Withdraw Status
+        app.patch("/approveWithdraw", async (req, res)=> {
+            const filter = {_id : new ObjectId (req?.body?.id)}
+            const approveDoc = {
+                $set: {status: "approved"}
+            }
+            const approveResult = await withdrawCollection.updateOne(filter, approveDoc);
+
+            const reduceFilter = {email: req?.body?.workerEmail}
+
+            const coinAmount = parseInt(req?.body?.coinAmount)
+
+            const reduceCoinDoc = {
+                $inc: { coin: -coinAmount}
+            }
+
+            if (approveResult?.modifiedCount) {
+                const reduceResult = await usersCollection.updateOne(reduceFilter, reduceCoinDoc);
+
+                res.send(reduceResult)
+            }
+            
+        })
+
 
         // Get All users Info
         app.get("/allUsers", async (req, res) => {

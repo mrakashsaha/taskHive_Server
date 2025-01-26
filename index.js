@@ -104,7 +104,7 @@ async function run() {
 
 
 
-        // ---worker related apis
+        // ---Buyer related apis
 
         // Posting a Task
         app.post("/tasks", async (req, res) => {
@@ -189,7 +189,58 @@ async function run() {
             const result = await tasksCollection.find(query, option).toArray();
             res.send(result);
         })
+        
+        
+        // Get all submission for approve action : Buyer Related
+        app.get("/getSubmission", async (req, res)=> {
+            const query =  {buyerEmail: req?.query?.email, status: "pending"}
+            console.log (query)
 
+            const result = await submissionCollection.find(query).toArray();
+            res.send(result);
+        })
+
+        // Approve Submission by Buyer
+        app.patch ("/approveSubmission", async (req, res)=> {
+            const approveFilter = {_id: new ObjectId(req?.query?.id)};
+            const approveDoc = {$set: {status: "approved"}}
+            const approveResult = await submissionCollection.updateOne(approveFilter, approveDoc);
+
+            if (approveResult?.modifiedCount) {
+                const incCoinDoc = {
+                    $inc: { coin: parseInt(req?.body?.payableCoin)}
+                }
+
+                const incFilter = {email: req?.body?.workerEmail}
+
+                const incrementCoinResult = await usersCollection.updateOne(incFilter, incCoinDoc);
+
+                res.send (incrementCoinResult);
+            }
+        })
+
+        // Reject Submission by Buyer
+        app.patch ("/rejectSubmission", async (req, res)=> {
+            const rejectedFilter = {_id: new ObjectId(req?.query?.id)};
+            const rejectedDoc = {$set: {status: "rejected"}}
+            const rejectedResult = await submissionCollection.updateOne(rejectedFilter, rejectedDoc);
+
+            if (rejectedResult?.modifiedCount) {
+                const incReqWorkerDoc = {
+                    $inc: { requiredWorkers: 1}
+                }
+
+                const incFilter = {_id: new ObjectId(req?.body?.taskId)}
+
+                const incReqWorkerDocResult = await tasksCollection.updateOne(incFilter, incReqWorkerDoc);
+
+                res.send (incReqWorkerDocResult);
+            }
+        })
+
+        
+        
+        //   worker related APIS
 
         //    Get All Task For Worker
         app.get("/task", async (req, res) => {
@@ -337,23 +388,22 @@ async function run() {
         // Worker Stats API
         app.get("/workerStats", async (req, res) => {
             const workerEmail = req?.query?.email;
-            console.log(workerEmail);
             const workerStats = await submissionCollection.aggregate([
                 {
                     $facet: {
                         allSubmission: [{ $match: { workerEmail: workerEmail } }, { $count: "submissions" }],
                         pendingSubmission: [{ $match: { workerEmail: workerEmail, status: "pending" } }, { $count: "pendingSubmissions" }],
-                        earnings: [{ $match: { workerEmail: workerEmail, status: "approved" } }, {$group: {_id: null, totalEarnings: { $sum: "$payableAmount" }}}],
+                        earnings: [{ $match: { workerEmail: workerEmail, status: "approved" } }, { $group: { _id: null, totalEarnings: { $sum: "$payableAmount" } } }],
                     }
                 }
             ]).toArray();
 
             const result = {
 
-                totalSubmission:  workerStats[0]?.allSubmission[0]?.submissions || 0,
-                totalPendingSubmission:  workerStats[0]?.pendingSubmission[0]?.pendingSubmissions || 0,
-                totalEarnings:  workerStats[0]?.earnings[0]?.totalEarnings || 0,
-                
+                totalSubmission: workerStats[0]?.allSubmission[0]?.submissions || 0,
+                totalPendingSubmission: workerStats[0]?.pendingSubmission[0]?.pendingSubmissions || 0,
+                totalEarnings: workerStats[0]?.earnings[0]?.totalEarnings || 0,
+
             };
 
             res.send(result)
@@ -361,10 +411,10 @@ async function run() {
 
 
         // Approve submission for view only by worker
-        app.get("/approvedSubmission", async (req, res)=> {
-            const query = {workerEmail: req?.query?.email, status: "approved"}
+        app.get("/approvedSubmission", async (req, res) => {
+            const query = { workerEmail: req?.query?.email, status: "approved" }
             const result = await submissionCollection.find(query).toArray();
-            res.send (result);
+            res.send(result);
         })
 
 
@@ -376,8 +426,6 @@ async function run() {
         app.post("/create-payment-intent", async (req, res) => {
             const { fee } = req.body;
             const amount = parseInt(fee * 100);
-
-            console.log(amount);
 
             try {
                 const paymentIntent = await stripe.paymentIntents.create({
@@ -443,26 +491,25 @@ async function run() {
         // Buyer stats have to work not completed
         app.get("/buyerStats", async (req, res) => {
             const buyerEmail = req?.query?.email;
-            console.log(buyerEmail);
             const buyerStats = await tasksCollection.aggregate([
                 {
                     $facet: {
                         alltasks: [{ $match: { postedBy: buyerEmail } }, { $count: "tasks" }],
-                        allPendingTasks: [{ $match: { postedBy: buyerEmail} }, {$group: {_id: null, pendingTasks: { $sum: "$requiredWorkers" }}}],
+                        allPendingTasks: [{ $match: { postedBy: buyerEmail } }, { $group: { _id: null, pendingTasks: { $sum: "$requiredWorkers" } } }],
                     }
                 }
             ]).toArray();
 
             const paymentStats = await paymentsCollection.aggregate([
-                { $match: { email: buyerEmail} }, {$group: {_id: null, allpayment: { $sum: "$amount" }}}
+                { $match: { email: buyerEmail } }, { $group: { _id: null, allpayment: { $sum: "$amount" } } }
             ]).toArray();
 
             const result = {
 
-                totalTasks:  buyerStats[0]?.alltasks[0]?.tasks || 0,
-                totalPendingTask:  buyerStats[0]?.allPendingTasks[0]?.pendingTasks || 0,
-                totalPayments:  paymentStats[0].allpayment || 0,
-                
+                totalTasks: buyerStats[0]?.alltasks[0]?.tasks || 0,
+                totalPendingTask: buyerStats[0]?.allPendingTasks[0]?.pendingTasks || 0,
+                totalPayments: paymentStats[0]?.allpayment || 0,
+
             };
 
             res.send(result)
@@ -488,7 +535,7 @@ async function run() {
 
             const paymentStats = await paymentsCollection.aggregate([
                 {
-                    $group: { _id: null, totalPayment: { $sum: "$coin" } }
+                    $group: { _id: null, totalPayment: { $sum: "$amount" } }
                 }
             ]).toArray();
 

@@ -51,10 +51,10 @@ const client = new MongoClient(uri, {
 
 async function run() {
     try {
-        await client.connect();
-        // Send a ping to confirm a successful connection
-        await client.db("admin").command({ ping: 1 });
-        console.log("Pinged your deployment. You successfully connected to MongoDB!");
+        // await client.connect();
+        // // Send a ping to confirm a successful connection
+        // await client.db("admin").command({ ping: 1 });
+        // console.log("Pinged your deployment. You successfully connected to MongoDB!");
 
         const usersCollection = client.db("taskHiveDB").collection("users");
         const tasksCollection = client.db("taskHiveDB").collection("tasks");
@@ -164,7 +164,6 @@ async function run() {
             const findTaskDetails = await tasksCollection.findOne(query);
             const refillAmount = findTaskDetails?.requiredWorkers * findTaskDetails?.payableAmount;
 
-            console.log(findTaskDetails, refillAmount)
             const refillFilter = { email: findTaskDetails?.postedBy }
             const refillCoinDoc = {
                 $inc: { coin: refillAmount }
@@ -194,8 +193,6 @@ async function run() {
         // Get all submission for approve action : Buyer Related
         app.get("/getSubmission", async (req, res)=> {
             const query =  {buyerEmail: req?.query?.email, status: "pending"}
-            console.log (query)
-
             const result = await submissionCollection.find(query).toArray();
             res.send(result);
         })
@@ -639,6 +636,16 @@ async function run() {
 
 
 
+        // API for PUblic
+        app.get("/bestWorkers", async (req, res)=> {
+            const result = await usersCollection.aggregate([
+                { $match: { role: 'worker' } }, 
+                { $sort: { coin: -1 } },
+                { $limit: 6 }
+              ]).toArray();
+
+              res.send(result);
+        })
 
 
 

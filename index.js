@@ -641,10 +641,54 @@ async function run() {
             const result = await usersCollection.aggregate([
                 { $match: { role: 'worker' } }, 
                 { $sort: { coin: -1 } },
-                { $limit: 6 }
+                { $limit: 8 }
               ]).toArray();
 
               res.send(result);
+        })
+
+        app.get("/featuredTask", async (req, res) => {
+            const result = await tasksCollection.aggregate([
+
+                {
+                    $match: {
+                        requiredWorkers: { $gt: 0 }
+                    },
+                    
+                },
+
+                { $sort: { payableAmount: -1 } },
+                { $limit: 8 },
+
+                {
+                    $lookup: {
+                        from: 'users',
+                        localField: 'postedBy',
+                        foreignField: 'email',
+                        as: 'userInfo'
+                    }
+                },
+                {
+                    $unwind: "$userInfo"
+                },
+                {
+                    $project: {
+                        _id: 1,
+                        taskTitle: 1,
+                        taskDetails: 1,
+                        requiredWorkers: 1,
+                        payableAmount: 1,
+                        completionDate: 1,
+                        submissionInfo: 1,
+                        taskImage: 1,
+                        buyerEmail: "$postedBy",
+                        buyerName: "$userInfo.displayName",
+                        buyerPhoto: "$userInfo.photoURL",
+                    }
+                }
+
+            ]).toArray();
+            res.send(result);
         })
 
 
